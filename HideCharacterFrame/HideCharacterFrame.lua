@@ -1,8 +1,8 @@
 local frameHandler = CreateFrame("FRAME");
 local function shouldShowFrame()
-    -- Check if player has any debuff
+    -- Never hide if player has a debuff
     local name = UnitDebuff("player", 1)
-    if name then  -- Show if any debuff is present
+    if name then
         return true
     end
 
@@ -31,17 +31,23 @@ end
 
 frameHandler:SetScript("OnEvent", function(self, event, unit)
     if(event == "PLAYER_REGEN_DISABLED") then
-        frameHandler:UnregisterEvent("UNIT_HEALTH_FREQUENT");
-        frameHandler:UnregisterEvent("UNIT_POWER_FREQUENT");
+        frameHandler:UnregisterEvent("UNIT_HEALTH_FREQUENT", "player");
+        frameHandler:UnregisterEvent("UNIT_POWER_FREQUENT", "player");
         frameHandler:UnregisterEvent("PLAYER_TARGET_CHANGED");
-        frameHandler:UnregisterEvent("UNIT_AURA");
+        frameHandler:UnregisterEvent("UNIT_AURA", "player");
         PlayerFrame:SetAlpha(1);
+    elseif(event == "PLAYER_LOGIN") then
+        frameHandler:RegisterEvent("UNIT_HEALTH_FREQUENT", "player");
+        frameHandler:RegisterEvent("UNIT_POWER_FREQUENT", "player");
+        frameHandler:RegisterEvent("PLAYER_TARGET_CHANGED");
+        frameHandler:RegisterEvent("UNIT_AURA", "player");
+        PlayerFrame:SetAlpha(shouldShowFrame() and 1 or 0);
     else
         if(event == "PLAYER_REGEN_ENABLED") then
-            frameHandler:RegisterEvent("UNIT_HEALTH_FREQUENT");
-            frameHandler:RegisterEvent("UNIT_POWER_FREQUENT");
+            frameHandler:RegisterEvent("UNIT_HEALTH_FREQUENT", "player");
+            frameHandler:RegisterEvent("UNIT_POWER_FREQUENT", "player");
             frameHandler:RegisterEvent("PLAYER_TARGET_CHANGED");
-            frameHandler:RegisterEvent("UNIT_AURA");
+            frameHandler:RegisterEvent("UNIT_AURA", "player");
         end
         
         -- Only update if the UNIT_AURA event is for the player
@@ -51,9 +57,10 @@ frameHandler:SetScript("OnEvent", function(self, event, unit)
     end
 end);
 
-frameHandler:RegisterEvent("UNIT_HEALTH_FREQUENT");
-frameHandler:RegisterEvent("UNIT_POWER_FREQUENT");
+frameHandler:RegisterEvent("PLAYER_LOGIN");
+frameHandler:RegisterEvent("UNIT_HEALTH_FREQUENT", "player");
+frameHandler:RegisterEvent("UNIT_POWER_FREQUENT", "player");
 frameHandler:RegisterEvent("PLAYER_TARGET_CHANGED");
 frameHandler:RegisterEvent("PLAYER_REGEN_ENABLED");
 frameHandler:RegisterEvent("PLAYER_REGEN_DISABLED");
-frameHandler:RegisterEvent("UNIT_AURA");
+frameHandler:RegisterEvent("UNIT_AURA", "player");
