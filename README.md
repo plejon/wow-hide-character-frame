@@ -6,10 +6,10 @@ Simple addon that hides your character frame when:
 - Full health
 - No debuffs
 - Power conditions:
- - Mana is full
- - Energy is full
- - Focus is full
- - Rage is zero
+  - Mana is full
+  - Energy is full
+  - Focus is full
+  - Rage is zero
 
 Frame shows when:
 - In combat
