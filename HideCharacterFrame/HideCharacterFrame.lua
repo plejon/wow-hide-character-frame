@@ -1,14 +1,54 @@
 local frameHandler = CreateFrame("FRAME");
+local _, playerClass = UnitClass("player");
+
 local function shouldShowFrame()
+    -- Always show if in combat (most common condition to short-circuit)
+    if UnitAffectingCombat("player") then
+        return true
+    end
+
     -- Never hide if player has a debuff
     local name = UnitDebuff("player", 1)
     if name then
         return true
     end
 
+    -- Special handling for hunters with pets
+    if playerClass == "HUNTER" and UnitExists("pet") then
+        -- Show frame if pet is dead
+        if UnitIsDead("pet") then
+            return true
+        end
+
+        local petHealth = UnitHealth("pet")
+        local petMaxHealth = UnitHealthMax("pet")
+        local petHappiness = GetPetHappiness()
+
+        -- Show frame if pet needs attention (low health or unhappy)
+        if petHealth < petMaxHealth or (petHappiness and petHappiness < 3) then
+            return true
+        end
+    end
+
+    -- Special handling for warlocks with pets
+    if playerClass == "WARLOCK" and UnitExists("pet") then
+        -- Show frame if pet is dead
+        if UnitIsDead("pet") then
+            return true
+        end
+
+        local petHealth = UnitHealth("pet")
+        local petMaxHealth = UnitHealthMax("pet")
+
+        -- Show frame if pet has not full health
+        if petHealth < petMaxHealth then
+            return true
+        end
+    end
+
     -- Get power type information
     local _, powerToken = UnitPowerType("player")
-    
+
     -- Special handling for rage
     if powerToken == "RAGE" then
         local currentRage = UnitPower("player")
@@ -16,17 +56,15 @@ local function shouldShowFrame()
         if currentRage == 0 then
             return UnitHealth("player") < UnitHealthMax("player")
                 or UnitExists("target")
-                or UnitAffectingCombat("player")
         end
         -- Show frame if rage is above 0
         return true
     end
-    
+
     -- Normal handling for other power types
-    return UnitHealth("player") < UnitHealthMax("player") 
+    return UnitHealth("player") < UnitHealthMax("player")
         or UnitPower("player") < UnitPowerMax("player")
         or UnitExists("target")
-        or UnitAffectingCombat("player")
 end
 
 frameHandler:SetScript("OnEvent", function(self, event, unit)
