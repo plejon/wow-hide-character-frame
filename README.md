@@ -1,6 +1,6 @@
 # wow-hide-character-frame
 
-Simple addon that hides your character if
+Simple addon that hides your character frame when:
  
 - Out of combat
 - No target
@@ -26,4 +26,5 @@ Character Frame shows when any of the above condition are not true, like
 - Power not full (or rage above zero)
 - Any debuff present
 
-No setup - just install and load addon.
+
+Settings in options -> addons -> HideCharacterFrame

@@ -1,5 +1,5 @@
 ## Interface: 110107, 11507
 ## Title: HideCharacterFrame
-## Version: v0.1.2
+## Version: v0.2.0
 ## X-Wago-ID: nGvpbv6x
 HideCharacterFrame.lua
