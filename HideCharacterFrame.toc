@@ -1,7 +1,5 @@
 ## Interface: 110107
 ## Interface-Classic: 40402
-## Interface-Vanilla: 11507
-## Interface-Cata: 40402
 ## Title: HideCharacterFrame
 ## Version: v0.1.0
 ## X-Wago-ID: nGvpbv6x
