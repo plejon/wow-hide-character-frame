@@ -1,4 +1,0 @@
-## Interface: 11507
-## Title: HideCharacterFrame
-## Version: v0.1.0
-HideCharacterFrame.lua
