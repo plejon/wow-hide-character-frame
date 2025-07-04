@@ -2,6 +2,7 @@
 # Edit at https://www.toptal.com/developers/gitignore?templates=lua,macos
 
 .idea/
+test.sh
 
 ### Lua ###
 # Compiled Lua sources
