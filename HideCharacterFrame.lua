@@ -11,7 +11,8 @@ local defaults = {
     hideNoDebuff = true,
     hidePetFullHealth = true,
     hidePetHappy = true,
-    hideRageZero = true
+    hideRageZero = true,
+    fadeOutDuration = 0.1
 }
 
 -- Initialize saved variables
@@ -59,67 +60,55 @@ local function shouldShowForPower()
     end
 end
 
--- Hunter-specific logic
-local function shouldShowForHunter()
-    -- Check generic conditions first
-    if shouldShowForCombat() or shouldShowForDebuffs() or shouldShowForTarget() or shouldShowForHealth() or shouldShowForPower() then
+-- Common pet logic for classes with pets
+local function shouldShowForPet(includeHappiness)
+    if not UnitExists("pet") then
+        return false
+    end
+
+    -- Show frame if pet is dead
+    if UnitIsDead("pet") then
         return true
     end
 
-    -- Hunter-specific pet logic
-    if UnitExists("pet") then
-        -- Show frame if pet is dead
-        if UnitIsDead("pet") then
+    -- Pet health check
+    if db.hidePetFullHealth then
+        local petHealth = UnitHealth("pet")
+        local petMaxHealth = UnitHealthMax("pet")
+        if petHealth < petMaxHealth then
             return true
         end
+    end
 
-        local petHealthHunter = UnitHealth("pet")
-        local petMaxHealthHunter = UnitHealthMax("pet")
-        local petHappinessHunter = GetPetHappiness()
-
-        -- Pet health check
-        if db.hidePetFullHealth and petHealthHunter < petMaxHealthHunter then
-            return true
-        end
-
-        -- Pet happiness check
-        if db.hidePetHappy and petHappinessHunter and petHappinessHunter < 3 then
+    -- Pet happiness check (Hunter only)
+    if includeHappiness and db.hidePetHappy then
+        local petHappiness = GetPetHappiness()
+        if petHappiness and petHappiness < 3 then
             return true
         end
     end
 
     return false
+end
+
+-- Generic logic for basic conditions
+local function shouldShowForBasicConditions()
+    return shouldShowForCombat() or shouldShowForDebuffs() or shouldShowForTarget() or shouldShowForHealth() or shouldShowForPower()
+end
+
+-- Hunter-specific logic
+local function shouldShowForHunter()
+    return shouldShowForBasicConditions() or shouldShowForPet(true)
 end
 
 -- Warlock-specific logic
 local function shouldShowForWarlock()
-    -- Check generic conditions first
-    if shouldShowForCombat() or shouldShowForDebuffs() or shouldShowForTarget() or shouldShowForHealth() or shouldShowForPower() then
-        return true
-    end
-
-    -- Warlock-specific pet logic
-    if UnitExists("pet") then
-        -- Show frame if pet is dead
-        if UnitIsDead("pet") then
-            return true
-        end
-
-        local petHealthWarlock = UnitHealth("pet")
-        local petMaxHealthWarlock = UnitHealthMax("pet")
-
-        -- Pet health check
-        if db.hidePetFullHealth and petHealthWarlock < petMaxHealthWarlock then
-            return true
-        end
-    end
-
-    return false
+    return shouldShowForBasicConditions() or shouldShowForPet(false)
 end
 
 -- Generic class logic (for classes without special handling)
 local function shouldShowForGenericClass()
-    return shouldShowForCombat() or shouldShowForDebuffs() or shouldShowForTarget() or shouldShowForHealth() or shouldShowForPower()
+    return shouldShowForBasicConditions()
 end
 
 -- Main function that delegates to class-specific handlers
@@ -139,14 +128,34 @@ local function shouldShowFrame()
     end
 end
 
--- Function to handle pet frame visibility
-local function updatePetFrameVisibility()
-    -- Only handle pet frame for classes that have pets
-    if playerClass == "HUNTER" or playerClass == "WARLOCK" then
-        if PetFrame then
-            -- Use the same logic as player frame for pet frame visibility
-            local shouldShow = shouldShowFrame()
-            PetFrame:SetAlpha(shouldShow and 1 or 0)
+-- Helper functions for event management
+local function registerUpdateEvents()
+    frameHandler:RegisterEvent("UNIT_HEALTH_FREQUENT", "player")
+    frameHandler:RegisterEvent("UNIT_POWER_FREQUENT", "player")
+    frameHandler:RegisterEvent("PLAYER_TARGET_CHANGED")
+    frameHandler:RegisterEvent("UNIT_AURA", "player")
+end
+
+local function unregisterUpdateEvents()
+    frameHandler:UnregisterEvent("UNIT_HEALTH_FREQUENT", "player")
+    frameHandler:UnregisterEvent("UNIT_POWER_FREQUENT", "player")
+    frameHandler:UnregisterEvent("PLAYER_TARGET_CHANGED")
+    frameHandler:UnregisterEvent("UNIT_AURA", "player")
+end
+
+-- Function to set frame visibility with fade out effect
+local function setFrameVisibility(visible)
+    if visible then
+        -- Show frames immediately
+        PlayerFrame:SetAlpha(1)
+        if (playerClass == "HUNTER" or playerClass == "WARLOCK") and PetFrame then
+            PetFrame:SetAlpha(1)
+        end
+    else
+        -- Fade out frames using configurable duration
+        UIFrameFadeOut(PlayerFrame, db.fadeOutDuration, PlayerFrame:GetAlpha(), 0)
+        if (playerClass == "HUNTER" or playerClass == "WARLOCK") and PetFrame then
+            UIFrameFadeOut(PetFrame, db.fadeOutDuration, PetFrame:GetAlpha(), 0)
         end
     end
 end
@@ -244,19 +253,51 @@ local function CreateOptionsPanel()
         cb:SetScript("OnClick", function(self)
             db[key] = self:GetChecked()
             -- Update frame visibility immediately
-            PlayerFrame:SetAlpha(shouldShowFrame() and 1 or 0)
-            updatePetFrameVisibility()
+            setFrameVisibility(shouldShowFrame())
         end)
 
         checkboxes[key] = cb
         return cb
     end
 
-    -- General Options Section
-    local generalGroup = CreateGroupSection("General Options", 450, 80, yOffset)
-    CreateCheckbox(generalGroup, "enabled", "Enable HideCharacterFrame", "Master toggle - Enable or disable the entire addon", 15, -35)
+    local function CreateSlider(parent, key, label, tooltip, min, max, step, xOffset, yPos)
+        local slider = CreateFrame("Slider", "HideCharacterFrame_" .. key, parent, "OptionsSliderTemplate")
+        slider:SetPoint("TOPLEFT", parent, "TOPLEFT", xOffset, yPos)
+        slider:SetMinMaxValues(min, max)
+        slider:SetValue(db[key])
+        slider:SetValueStep(step)
+        slider:SetObeyStepOnDrag(true)
+        
+        -- Set label
+        slider.Text:SetText(label)
+        
+        -- Set low/high labels
+        slider.Low:SetText(tostring(min))
+        slider.High:SetText(tostring(max))
+        
+        -- Value display
+        local valueText = slider:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+        valueText:SetPoint("TOP", slider, "BOTTOM", 0, -5)
+        valueText:SetText(string.format("%.1f seconds", db[key]))
+        
+        if tooltip then
+            slider.tooltipText = tooltip
+        end
+        
+        slider:SetScript("OnValueChanged", function(self, value)
+            db[key] = value
+            valueText:SetText(string.format("%.1f seconds", value))
+        end)
+        
+        return slider
+    end
 
-    yOffset = yOffset - 100
+    -- General Options Section
+    local generalGroup = CreateGroupSection("General Options", 450, 120, yOffset)
+    CreateCheckbox(generalGroup, "enabled", "Enable HideCharacterFrame", "Master toggle - Enable or disable the entire addon", 15, -35)
+    CreateSlider(generalGroup, "fadeOutDuration", "Fade Out Duration", "How long frames take to fade out (0 = instant)", 0.0, 2.0, 0.1, 15, -75)
+
+    yOffset = yOffset - 140
 
     -- Visibility Conditions Section
     local visibilityGroup = CreateGroupSection("Visibility Conditions", 450, 220, yOffset)
@@ -303,8 +344,7 @@ local function CreateOptionsPanel()
                 checkboxes[k]:SetChecked(v)
             end
         end
-        PlayerFrame:SetAlpha(shouldShowFrame() and 1 or 0)
-        updatePetFrameVisibility()
+        setFrameVisibility(shouldShowFrame())
         print("|cFF00FF00HideCharacterFrame:|r Settings reset to defaults")
     end)
 
@@ -332,40 +372,25 @@ frameHandler:SetScript("OnEvent", function(self, event, unit, ...)
             frameHandler:UnregisterEvent("ADDON_LOADED")
         end
     elseif(event == "PLAYER_REGEN_DISABLED") then
-        frameHandler:UnregisterEvent("UNIT_HEALTH_FREQUENT", "player");
-        frameHandler:UnregisterEvent("UNIT_POWER_FREQUENT", "player");
-        frameHandler:UnregisterEvent("PLAYER_TARGET_CHANGED");
-        frameHandler:UnregisterEvent("UNIT_AURA", "player");
-        PlayerFrame:SetAlpha(1);
-        if PetFrame then PetFrame:SetAlpha(1); end
+        unregisterUpdateEvents();
+        setFrameVisibility(true);
     elseif(event == "PLAYER_LOGIN") then
-        frameHandler:RegisterEvent("UNIT_HEALTH_FREQUENT", "player");
-        frameHandler:RegisterEvent("UNIT_POWER_FREQUENT", "player");
-        frameHandler:RegisterEvent("PLAYER_TARGET_CHANGED");
-        frameHandler:RegisterEvent("UNIT_AURA", "player");
-        PlayerFrame:SetAlpha(shouldShowFrame() and 1 or 0);
-        updatePetFrameVisibility();
+        registerUpdateEvents();
+        setFrameVisibility(shouldShowFrame());
     else
         if(event == "PLAYER_REGEN_ENABLED") then
-            frameHandler:RegisterEvent("UNIT_HEALTH_FREQUENT", "player");
-            frameHandler:RegisterEvent("UNIT_POWER_FREQUENT", "player");
-            frameHandler:RegisterEvent("PLAYER_TARGET_CHANGED");
-            frameHandler:RegisterEvent("UNIT_AURA", "player");
+            registerUpdateEvents();
         end
 
         -- Only update if the UNIT_AURA event is for the player
         if event ~= "UNIT_AURA" or unit == "player" then
-            PlayerFrame:SetAlpha(shouldShowFrame() and 1 or 0);
-        updatePetFrameVisibility();
+            setFrameVisibility(shouldShowFrame());
         end
     end
 end);
 
 frameHandler:RegisterEvent("ADDON_LOADED");
 frameHandler:RegisterEvent("PLAYER_LOGIN");
-frameHandler:RegisterEvent("UNIT_HEALTH_FREQUENT", "player");
-frameHandler:RegisterEvent("UNIT_POWER_FREQUENT", "player");
-frameHandler:RegisterEvent("PLAYER_TARGET_CHANGED");
 frameHandler:RegisterEvent("PLAYER_REGEN_ENABLED");
 frameHandler:RegisterEvent("PLAYER_REGEN_DISABLED");
-frameHandler:RegisterEvent("UNIT_AURA", "player");
+registerUpdateEvents();
