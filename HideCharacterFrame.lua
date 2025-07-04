@@ -11,7 +11,8 @@ local defaults = {
     hideNoDebuff = true,
     hidePetFullHealth = true,
     hidePetHappy = true,
-    hideRageZero = true
+    hideRageZero = true,
+    fadeOutDuration = 0.1
 }
 
 -- Initialize saved variables
@@ -151,10 +152,10 @@ local function setFrameVisibility(visible)
             PetFrame:SetAlpha(1)
         end
     else
-        -- Fade out frames
-        UIFrameFadeOut(PlayerFrame, 0.1, PlayerFrame:GetAlpha(), 0)
+        -- Fade out frames using configurable duration
+        UIFrameFadeOut(PlayerFrame, db.fadeOutDuration, PlayerFrame:GetAlpha(), 0)
         if (playerClass == "HUNTER" or playerClass == "WARLOCK") and PetFrame then
-            UIFrameFadeOut(PetFrame, 0.1, PetFrame:GetAlpha(), 0)
+            UIFrameFadeOut(PetFrame, db.fadeOutDuration, PetFrame:GetAlpha(), 0)
         end
     end
 end
@@ -259,11 +260,44 @@ local function CreateOptionsPanel()
         return cb
     end
 
-    -- General Options Section
-    local generalGroup = CreateGroupSection("General Options", 450, 80, yOffset)
-    CreateCheckbox(generalGroup, "enabled", "Enable HideCharacterFrame", "Master toggle - Enable or disable the entire addon", 15, -35)
+    local function CreateSlider(parent, key, label, tooltip, min, max, step, xOffset, yPos)
+        local slider = CreateFrame("Slider", "HideCharacterFrame_" .. key, parent, "OptionsSliderTemplate")
+        slider:SetPoint("TOPLEFT", parent, "TOPLEFT", xOffset, yPos)
+        slider:SetMinMaxValues(min, max)
+        slider:SetValue(db[key])
+        slider:SetValueStep(step)
+        slider:SetObeyStepOnDrag(true)
+        
+        -- Set label
+        slider.Text:SetText(label)
+        
+        -- Set low/high labels
+        slider.Low:SetText(tostring(min))
+        slider.High:SetText(tostring(max))
+        
+        -- Value display
+        local valueText = slider:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+        valueText:SetPoint("TOP", slider, "BOTTOM", 0, -5)
+        valueText:SetText(string.format("%.1f seconds", db[key]))
+        
+        if tooltip then
+            slider.tooltipText = tooltip
+        end
+        
+        slider:SetScript("OnValueChanged", function(self, value)
+            db[key] = value
+            valueText:SetText(string.format("%.1f seconds", value))
+        end)
+        
+        return slider
+    end
 
-    yOffset = yOffset - 100
+    -- General Options Section
+    local generalGroup = CreateGroupSection("General Options", 450, 120, yOffset)
+    CreateCheckbox(generalGroup, "enabled", "Enable HideCharacterFrame", "Master toggle - Enable or disable the entire addon", 15, -35)
+    CreateSlider(generalGroup, "fadeOutDuration", "Fade Out Duration", "How long frames take to fade out (0 = instant)", 0.0, 2.0, 0.1, 15, -75)
+
+    yOffset = yOffset - 140
 
     -- Visibility Conditions Section
     local visibilityGroup = CreateGroupSection("Visibility Conditions", 450, 220, yOffset)
