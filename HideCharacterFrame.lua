@@ -379,6 +379,30 @@ frameHandler:SetScript("OnEvent", function(self, event, unit, ...)
     elseif(event == "PLAYER_LOGIN") then
         registerUpdateEvents();
         setFrameVisibility(shouldShowFrame());
+    elseif event == "PLAYER_TARGET_CHANGED" then
+        -- Handle target changes with special fade logic
+        local visible = shouldShowFrame()
+        if not visible and db.hideNoTarget and not UnitExists("target") then
+            -- Check if hiding only because target was deselected (all other conditions false)
+            local otherConditions = shouldShowForCombat() or shouldShowForDebuffs() or shouldShowForHealth() or shouldShowForPower()
+            
+            -- Check pet conditions for classes with pets
+            if playerClass == "HUNTER" then
+                otherConditions = otherConditions or shouldShowForPet(true)
+            elseif playerClass == "WARLOCK" then
+                otherConditions = otherConditions or shouldShowForPet(false)
+            end
+            
+            if not otherConditions then
+                -- Only target deselected - hide immediately without fade
+                PlayerFrame:SetAlpha(0)
+                if (playerClass == "HUNTER" or playerClass == "WARLOCK") and PetFrame then
+                    PetFrame:SetAlpha(0)
+                end
+                return
+            end
+        end
+        setFrameVisibility(visible)
     else
         if(event == "PLAYER_REGEN_ENABLED") then
             registerUpdateEvents();
