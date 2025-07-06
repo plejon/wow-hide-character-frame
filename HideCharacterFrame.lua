@@ -12,20 +12,12 @@ local defaults = {
     hidePetFullHealth = true,
     hidePetHappy = true,
     hideRageZero = true,
+    fadeOutEnabled = false,
     fadeOutDuration = 0.1
 }
 
--- Initialize saved variables
-HideCharacterFrameDB = HideCharacterFrameDB or defaults
-
--- Ensure all settings exist
-for k, v in pairs(defaults) do
-    if HideCharacterFrameDB[k] == nil then
-        HideCharacterFrameDB[k] = v
-    end
-end
-
-local db = HideCharacterFrameDB
+-- Saved variables will be initialized in ADDON_LOADED event
+local db
 
 -- Generic utility functions for basic checks
 local function shouldShowForCombat()
@@ -96,21 +88,6 @@ local function shouldShowForBasicConditions()
     return shouldShowForCombat() or shouldShowForDebuffs() or shouldShowForTarget() or shouldShowForHealth() or shouldShowForPower()
 end
 
--- Hunter-specific logic
-local function shouldShowForHunter()
-    return shouldShowForBasicConditions() or shouldShowForPet(true)
-end
-
--- Warlock-specific logic
-local function shouldShowForWarlock()
-    return shouldShowForBasicConditions() or shouldShowForPet(false)
-end
-
--- Generic class logic (for classes without special handling)
-local function shouldShowForGenericClass()
-    return shouldShowForBasicConditions()
-end
-
 -- Main function that delegates to class-specific handlers
 local function shouldShowFrame()
     -- If addon is disabled, always show frame
@@ -118,13 +95,16 @@ local function shouldShowFrame()
         return true
     end
 
-    -- Delegate to appropriate class-specific function
+    -- Check basic conditions for all classes
+    local showForBasic = shouldShowForBasicConditions()
+    
+    -- Add pet-specific conditions for classes with pets
     if playerClass == "HUNTER" then
-        return shouldShowForHunter()
+        return showForBasic or shouldShowForPet(true)
     elseif playerClass == "WARLOCK" then
-        return shouldShowForWarlock()
+        return showForBasic or shouldShowForPet(false)
     else
-        return shouldShowForGenericClass()
+        return showForBasic
     end
 end
 
@@ -152,10 +132,18 @@ local function setFrameVisibility(visible)
             PetFrame:SetAlpha(1)
         end
     else
-        -- Fade out frames using configurable duration
-        UIFrameFadeOut(PlayerFrame, db.fadeOutDuration, PlayerFrame:GetAlpha(), 0)
-        if (playerClass == "HUNTER" or playerClass == "WARLOCK") and PetFrame then
-            UIFrameFadeOut(PetFrame, db.fadeOutDuration, PetFrame:GetAlpha(), 0)
+        if db.fadeOutEnabled then
+            -- Fade out frames using configurable duration
+            UIFrameFadeOut(PlayerFrame, db.fadeOutDuration, PlayerFrame:GetAlpha(), 0)
+            if (playerClass == "HUNTER" or playerClass == "WARLOCK") and PetFrame then
+                UIFrameFadeOut(PetFrame, db.fadeOutDuration, PetFrame:GetAlpha(), 0)
+            end
+        else
+            -- Hide frames immediately
+            PlayerFrame:SetAlpha(0)
+            if (playerClass == "HUNTER" or playerClass == "WARLOCK") and PetFrame then
+                PetFrame:SetAlpha(0)
+            end
         end
     end
 end
@@ -293,11 +281,12 @@ local function CreateOptionsPanel()
     end
 
     -- General Options Section
-    local generalGroup = CreateGroupSection("General Options", 450, 120, yOffset)
+    local generalGroup = CreateGroupSection("General Options", 450, 150, yOffset)
     CreateCheckbox(generalGroup, "enabled", "Enable HideCharacterFrame", "Master toggle - Enable or disable the entire addon", 15, -35)
-    CreateSlider(generalGroup, "fadeOutDuration", "Fade Out Duration", "How long frames take to fade out (0 = instant)", 0.0, 2.0, 0.1, 15, -75)
+    CreateCheckbox(generalGroup, "fadeOutEnabled", "Enable Fade Out", "Enable or disable fade out animation when hiding frames", 15, -60)
+    CreateSlider(generalGroup, "fadeOutDuration", "Fade Out Duration", "How long frames take to fade out (0 = instant)", 0.0, 2.0, 0.1, 15, -105)
 
-    yOffset = yOffset - 140
+    yOffset = yOffset - 170
 
     -- Visibility Conditions Section
     local visibilityGroup = CreateGroupSection("Visibility Conditions", 450, 220, yOffset)
@@ -357,6 +346,19 @@ frameHandler:SetScript("OnEvent", function(self, event, unit, ...)
     if event == "ADDON_LOADED" then
         local addonName = unit
         if addonName == "HideCharacterFrame" then
+            -- Initialize saved variables
+            HideCharacterFrameDB = HideCharacterFrameDB or {}
+            
+            -- Ensure all settings exist
+            for k, v in pairs(defaults) do
+                if HideCharacterFrameDB[k] == nil then
+                    HideCharacterFrameDB[k] = v
+                end
+            end
+            
+            -- Set up db reference
+            db = HideCharacterFrameDB
+            
             -- Create and register options panel
             optionsPanel = CreateOptionsPanel()
 
@@ -393,4 +395,3 @@ frameHandler:RegisterEvent("ADDON_LOADED");
 frameHandler:RegisterEvent("PLAYER_LOGIN");
 frameHandler:RegisterEvent("PLAYER_REGEN_ENABLED");
 frameHandler:RegisterEvent("PLAYER_REGEN_DISABLED");
-registerUpdateEvents();
