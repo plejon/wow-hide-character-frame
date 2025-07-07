@@ -12,7 +12,8 @@ local defaults = {
     hidePetFullHealth = true,
     hidePetHappy = true,
     hideRageZero = true,
-    fadeOutEnabled = false,
+    hidePvP = false,
+    fadeOutEnabled = true,
     fadeOutDuration = 0.1
 }
 
@@ -52,6 +53,10 @@ local function shouldShowForPower()
     end
 end
 
+local function shouldShowForPvP()
+    return db.hidePvP and UnitIsPVP("player")
+end
+
 -- Common pet logic for classes with pets
 local function shouldShowForPet(includeHappiness)
     if not UnitExists("pet") then
@@ -85,7 +90,7 @@ end
 
 -- Generic logic for basic conditions
 local function shouldShowForBasicConditions()
-    return shouldShowForCombat() or shouldShowForDebuffs() or shouldShowForTarget() or shouldShowForHealth() or shouldShowForPower()
+    return shouldShowForCombat() or shouldShowForDebuffs() or shouldShowForTarget() or shouldShowForHealth() or shouldShowForPower() or shouldShowForPvP()
 end
 
 -- Main function that delegates to class-specific handlers
@@ -114,6 +119,7 @@ local function registerUpdateEvents()
     frameHandler:RegisterEvent("UNIT_POWER_FREQUENT", "player")
     frameHandler:RegisterEvent("PLAYER_TARGET_CHANGED")
     frameHandler:RegisterEvent("UNIT_AURA", "player")
+    frameHandler:RegisterEvent("PLAYER_FLAGS_CHANGED")
 end
 
 local function unregisterUpdateEvents()
@@ -121,6 +127,7 @@ local function unregisterUpdateEvents()
     frameHandler:UnregisterEvent("UNIT_POWER_FREQUENT", "player")
     frameHandler:UnregisterEvent("PLAYER_TARGET_CHANGED")
     frameHandler:UnregisterEvent("UNIT_AURA", "player")
+    frameHandler:UnregisterEvent("PLAYER_FLAGS_CHANGED")
 end
 
 -- Function to set frame visibility with fade out effect
@@ -153,23 +160,50 @@ local function CreateOptionsPanel()
     local panel = CreateFrame("Frame", "HideCharacterFrameOptionsPanel", UIParent)
     panel.name = "HideCharacterFrame"
 
-    -- Title
+    -- Title (fixed at top)
     local title = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
     title:SetPoint("TOPLEFT", 16, -16)
     title:SetText("HideCharacterFrame Options")
 
-    -- Version info
+    -- Version info (fixed at top)
     local version = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
     version:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
     version:SetText("Configure when to hide the character frame")
 
-    local yOffset = -60
+    -- Create scroll frame using UIPanelScrollFrameTemplate (like DBM-GUI)
+    local scrollFrame = CreateFrame("ScrollFrame", "HideCharacterFrameScrollFrame", panel, "UIPanelScrollFrameTemplate")
+    scrollFrame:SetPoint("TOPLEFT", version, "BOTTOMLEFT", 0, -10)
+    scrollFrame:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -30, 16)
+
+    -- Create scrollable content frame
+    local content = CreateFrame("Frame", "HideCharacterFrameContent", scrollFrame)
+    content:SetSize(450, 1) -- Fixed width, height will be set dynamically
+    scrollFrame:SetScrollChild(content)
+
+    -- Enable mouse wheel scrolling
+    scrollFrame:EnableMouseWheel(true)
+    scrollFrame:SetScript("OnMouseWheel", function(self, delta)
+        local scrollBar = _G[self:GetName() .. "ScrollBar"]
+        local step = 20
+        if delta == 1 then -- scroll up
+            scrollBar:SetValue(scrollBar:GetValue() - step)
+        elseif delta == -1 then -- scroll down
+            scrollBar:SetValue(scrollBar:GetValue() + step)
+        end
+    end)
+
+    local yOffset = -20
     local checkboxes = {}
+    local sliders = {}
+    
+    -- Store references for later use
+    panel.scrollFrame = scrollFrame
+    panel.content = content
 
     -- Helper function to create a bordered group section
     local function CreateGroupSection(name, width, height, yPos)
-        local group = CreateFrame("Frame", nil, panel, "BackdropTemplate")
-        group:SetPoint("TOPLEFT", 16, yPos)
+        local group = CreateFrame("Frame", nil, content, "BackdropTemplate")
+        group:SetPoint("TOPLEFT", content, "TOPLEFT", 5, yPos)
         group:SetSize(width, height)
 
         -- Create border backdrop (Classic Era compatible)
@@ -228,15 +262,11 @@ local function CreateOptionsPanel()
         return group, groupTitle
     end
 
-    local function CreateCheckbox(parent, key, label, tooltip, xOffset, yPos)
+    local function CreateCheckbox(parent, key, label, xOffset, yPos)
         local cb = CreateFrame("CheckButton", "HideCharacterFrame_" .. key, parent, "InterfaceOptionsCheckButtonTemplate")
         cb:SetPoint("TOPLEFT", parent, "TOPLEFT", xOffset, yPos)
         cb.Text:SetText(label)
         cb:SetChecked(db[key])
-
-        if tooltip then
-            cb.tooltipText = tooltip
-        end
 
         cb:SetScript("OnClick", function(self)
             db[key] = self:GetChecked()
@@ -248,7 +278,7 @@ local function CreateOptionsPanel()
         return cb
     end
 
-    local function CreateSlider(parent, key, label, tooltip, min, max, step, xOffset, yPos)
+    local function CreateSlider(parent, key, label, min, max, step, xOffset, yPos)
         local slider = CreateFrame("Slider", "HideCharacterFrame_" .. key, parent, "OptionsSliderTemplate")
         slider:SetPoint("TOPLEFT", parent, "TOPLEFT", xOffset, yPos)
         slider:SetMinMaxValues(min, max)
@@ -268,28 +298,25 @@ local function CreateOptionsPanel()
         valueText:SetPoint("TOP", slider, "BOTTOM", 0, -5)
         valueText:SetText(string.format("%.1f seconds", db[key]))
         
-        if tooltip then
-            slider.tooltipText = tooltip
-        end
-        
         slider:SetScript("OnValueChanged", function(self, value)
             db[key] = value
             valueText:SetText(string.format("%.1f seconds", value))
         end)
         
+        sliders[key] = slider
         return slider
     end
 
     -- General Options Section
     local generalGroup = CreateGroupSection("General Options", 450, 150, yOffset)
-    CreateCheckbox(generalGroup, "enabled", "Enable HideCharacterFrame", "Master toggle - Enable or disable the entire addon", 15, -35)
-    CreateCheckbox(generalGroup, "fadeOutEnabled", "Enable Fade Out", "Enable or disable fade out animation when hiding frames", 15, -60)
-    CreateSlider(generalGroup, "fadeOutDuration", "Fade Out Duration", "How long frames take to fade out (0 = instant)", 0.0, 2.0, 0.1, 15, -105)
+    CreateCheckbox(generalGroup, "enabled", "Enable HideCharacterFrame", 15, -35)
+    CreateCheckbox(generalGroup, "fadeOutEnabled", "Enable Fade Out (not when deselecting target)", 15, -60)
+    CreateSlider(generalGroup, "fadeOutDuration", "Fade Out Duration", 0.0, 2.0, 0.1, 15, -105)
 
     yOffset = yOffset - 170
 
     -- Visibility Conditions Section
-    local visibilityGroup = CreateGroupSection("Visibility Conditions", 450, 220, yOffset)
+    local visibilityGroup = CreateGroupSection("Visibility Conditions", 450, 245, yOffset)
 
     -- Description text
     local desc = visibilityGroup:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
@@ -298,33 +325,34 @@ local function CreateOptionsPanel()
     desc:SetTextColor(0.8, 0.8, 0.8, 1)
 
     -- Checkboxes in two columns
-    CreateCheckbox(visibilityGroup, "hideCombat", "Show in combat", "Always show frame when fighting enemies", 15, -55)
-    CreateCheckbox(visibilityGroup, "hideFullHealth", "Show when health not full", "Show frame when you're injured", 15, -80)
-    CreateCheckbox(visibilityGroup, "hideFullPower", "Show when power not full (mana/energy/focus)", "Show frame when mana/energy/focus < max", 15, -105)
-    CreateCheckbox(visibilityGroup, "hideRageZero", "Show when rage above zero (Warrior/Druid only)", "For warriors/druids: Show when you have rage", 15, -130)
-    CreateCheckbox(visibilityGroup, "hideNoTarget", "Show when target selected", "Show frame when you have something targeted", 15, -155)
-    CreateCheckbox(visibilityGroup, "hideNoDebuff", "Show when debuffed", "Show frame when you have negative effects", 15, -180)
+    CreateCheckbox(visibilityGroup, "hideCombat", "Show in combat", 15, -55)
+    CreateCheckbox(visibilityGroup, "hideFullHealth", "Show when health not full", 15, -80)
+    CreateCheckbox(visibilityGroup, "hideFullPower", "Show when power not full (mana/energy/focus)", 15, -105)
+    CreateCheckbox(visibilityGroup, "hideRageZero", "Show when rage above zero (Warrior/Druid only)", 15, -130)
+    CreateCheckbox(visibilityGroup, "hideNoTarget", "Show when target selected", 15, -155)
+    CreateCheckbox(visibilityGroup, "hideNoDebuff", "Show when debuffed", 15, -180)
+    CreateCheckbox(visibilityGroup, "hidePvP", "Show when PvP enabled (useful for Hardcore)", 15, -205)
 
-    yOffset = yOffset - 240
+    yOffset = yOffset - 265
 
     -- Pet Options Section (only for classes with pets)
     if playerClass == "HUNTER" or playerClass == "WARLOCK" then
         local petHeight = playerClass == "HUNTER" and 110 or 80
         local petGroup = CreateGroupSection("Pet Options", 450, petHeight, yOffset)
 
-        CreateCheckbox(petGroup, "hidePetFullHealth", "Show when pet health not full", "Show frame when your pet is injured", 15, -35)
+        CreateCheckbox(petGroup, "hidePetFullHealth", "Show when pet health not full", 15, -35)
 
         if playerClass == "HUNTER" then
-            CreateCheckbox(petGroup, "hidePetHappy", "Show when pet unhappy (Hunter only)", "Hunter only: Show when pet happiness is low", 15, -60)
+            CreateCheckbox(petGroup, "hidePetHappy", "Show when pet unhappy (Hunter only)", 15, -60)
         end
 
         yOffset = yOffset - (petHeight + 20)
     end
 
-    -- Reset button
-    local resetBtn = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+    -- Reset button (inside scrollable content)
+    local resetBtn = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
     resetBtn:SetSize(120, 22)
-    resetBtn:SetPoint("TOPLEFT", 20, yOffset - 10)
+    resetBtn:SetPoint("TOPLEFT", content, "TOPLEFT", 15, yOffset - 10)
     resetBtn:SetText("Reset to Defaults")
     resetBtn:SetScript("OnClick", function()
         for k, v in pairs(defaults) do
@@ -332,10 +360,36 @@ local function CreateOptionsPanel()
             if checkboxes[k] then
                 checkboxes[k]:SetChecked(v)
             end
+            if sliders[k] then
+                sliders[k]:SetValue(v)
+            end
         end
         setFrameVisibility(shouldShowFrame())
         print("|cFF00FF00HideCharacterFrame:|r Settings reset to defaults")
     end)
+
+    -- Calculate total content height and set up scroll range
+    local totalHeight = math.abs(yOffset) + 50 -- Add some padding
+    content:SetHeight(totalHeight)
+    
+    -- Set up scroll range (like DBM-GUI pattern)
+    local function updateScrollRange()
+        local scrollBar = _G[scrollFrame:GetName() .. "ScrollBar"]
+        local maxScroll = totalHeight - scrollFrame:GetHeight()
+        
+        if maxScroll > 0 then
+            scrollBar:SetMinMaxValues(0, maxScroll)
+            scrollBar:Show()
+        else
+            scrollBar:SetMinMaxValues(0, 0)
+            scrollBar:Hide()
+        end
+        scrollBar:SetValue(0)
+    end
+    
+    -- Update scroll range when frame is shown
+    panel:SetScript("OnShow", updateScrollRange)
+    updateScrollRange()
 
     return panel
 end
@@ -384,7 +438,7 @@ frameHandler:SetScript("OnEvent", function(self, event, unit, ...)
         local visible = shouldShowFrame()
         if not visible and db.hideNoTarget and not UnitExists("target") then
             -- Check if hiding only because target was deselected (all other conditions false)
-            local otherConditions = shouldShowForCombat() or shouldShowForDebuffs() or shouldShowForHealth() or shouldShowForPower()
+            local otherConditions = shouldShowForCombat() or shouldShowForDebuffs() or shouldShowForHealth() or shouldShowForPower() or shouldShowForPvP()
             
             -- Check pet conditions for classes with pets
             if playerClass == "HUNTER" then
