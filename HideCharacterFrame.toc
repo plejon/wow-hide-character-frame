@@ -1,7 +1,6 @@
 ## Interface: 110107, 11507
 ## Title: HideCharacterFrame
 ## Version: v0.3.2
-## X-Wago-ID: nGvpbv6x
 ## SavedVariables: HideCharacterFrameDB
 ## SavedVariablesPerCharacter: HideCharacterFrameDB
 HideCharacterFrame.lua
