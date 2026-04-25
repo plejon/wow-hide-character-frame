@@ -5,6 +5,7 @@ Simple addon that hides your character frame when:
 - Out of combat
 - No target
 - No debuff
+- Not casting
 - Full health
 - Pets (warlock/hunter): 
   - Full health 
@@ -25,6 +26,7 @@ Character Frame shows when any of the above condition are not true, like
 - Health not full
 - Power not full (or rage above zero)
 - Any debuff present
+- Casting a spell
 
 
 Settings in options -> addons -> HideCharacterFrame
