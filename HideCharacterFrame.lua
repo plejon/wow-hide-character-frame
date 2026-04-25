@@ -12,6 +12,7 @@ local defaults = {
     hidePetFullHealth = true,
     hidePetHappy = true,
     hideRageZero = true,
+    hideCasting = true,
     hidePvP = false,
     fadeOutEnabled = true,
     fadeOutDuration = 0.1
@@ -53,6 +54,10 @@ local function shouldShowForPower()
     end
 end
 
+local function shouldShowForCasting()
+    return db.hideCasting and (UnitCastingInfo("player") or UnitChannelInfo("player"))
+end
+
 local function shouldShowForPvP()
     return db.hidePvP and UnitIsPVP("player")
 end
@@ -90,7 +95,7 @@ end
 
 -- Generic logic for basic conditions
 local function shouldShowForBasicConditions()
-    return shouldShowForCombat() or shouldShowForDebuffs() or shouldShowForTarget() or shouldShowForHealth() or shouldShowForPower() or shouldShowForPvP()
+    return shouldShowForCombat() or shouldShowForDebuffs() or shouldShowForTarget() or shouldShowForHealth() or shouldShowForPower() or shouldShowForCasting() or shouldShowForPvP()
 end
 
 -- Main function that delegates to class-specific handlers
@@ -120,6 +125,10 @@ local function registerUpdateEvents()
     frameHandler:RegisterEvent("PLAYER_TARGET_CHANGED")
     frameHandler:RegisterEvent("UNIT_AURA", "player")
     frameHandler:RegisterEvent("PLAYER_FLAGS_CHANGED")
+    frameHandler:RegisterEvent("UNIT_SPELLCAST_START")
+    frameHandler:RegisterEvent("UNIT_SPELLCAST_STOP")
+    frameHandler:RegisterEvent("UNIT_SPELLCAST_CHANNEL_START")
+    frameHandler:RegisterEvent("UNIT_SPELLCAST_CHANNEL_STOP")
 end
 
 local function unregisterUpdateEvents()
@@ -128,6 +137,10 @@ local function unregisterUpdateEvents()
     frameHandler:UnregisterEvent("PLAYER_TARGET_CHANGED")
     frameHandler:UnregisterEvent("UNIT_AURA", "player")
     frameHandler:UnregisterEvent("PLAYER_FLAGS_CHANGED")
+    frameHandler:UnregisterEvent("UNIT_SPELLCAST_START")
+    frameHandler:UnregisterEvent("UNIT_SPELLCAST_STOP")
+    frameHandler:UnregisterEvent("UNIT_SPELLCAST_CHANNEL_START")
+    frameHandler:UnregisterEvent("UNIT_SPELLCAST_CHANNEL_STOP")
 end
 
 -- Function to set frame visibility with fade out effect
@@ -316,7 +329,7 @@ local function CreateOptionsPanel()
     yOffset = yOffset - 170
 
     -- Visibility Conditions Section
-    local visibilityGroup = CreateGroupSection("Visibility Conditions", 450, 245, yOffset)
+    local visibilityGroup = CreateGroupSection("Visibility Conditions", 450, 270, yOffset)
 
     -- Description text
     local desc = visibilityGroup:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
@@ -331,9 +344,10 @@ local function CreateOptionsPanel()
     CreateCheckbox(visibilityGroup, "hideRageZero", "Show when rage above zero (Warrior/Druid only)", 15, -130)
     CreateCheckbox(visibilityGroup, "hideNoTarget", "Show when target selected", 15, -155)
     CreateCheckbox(visibilityGroup, "hideNoDebuff", "Show when debuffed", 15, -180)
-    CreateCheckbox(visibilityGroup, "hidePvP", "Show when PvP enabled (useful for Hardcore)", 15, -205)
+    CreateCheckbox(visibilityGroup, "hideCasting", "Show when casting", 15, -205)
+    CreateCheckbox(visibilityGroup, "hidePvP", "Show when PvP enabled (useful for Hardcore)", 15, -230)
 
-    yOffset = yOffset - 265
+    yOffset = yOffset - 290
 
     -- Pet Options Section (only for classes with pets)
     if playerClass == "HUNTER" or playerClass == "WARLOCK" then
@@ -462,8 +476,9 @@ frameHandler:SetScript("OnEvent", function(self, event, unit, ...)
             registerUpdateEvents();
         end
 
-        -- Only update if the UNIT_AURA event is for the player
-        if event ~= "UNIT_AURA" or unit == "player" then
+        -- Only update if the unit event is for the player
+        if (event ~= "UNIT_AURA" and event ~= "UNIT_SPELLCAST_START" and event ~= "UNIT_SPELLCAST_STOP"
+            and event ~= "UNIT_SPELLCAST_CHANNEL_START" and event ~= "UNIT_SPELLCAST_CHANNEL_STOP") or unit == "player" then
             setFrameVisibility(shouldShowFrame());
         end
     end
